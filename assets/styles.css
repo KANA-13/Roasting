@@ -1,0 +1,68 @@
+/* Main styles */
+body {
+    color: #4a4a4a;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Header styles */
+.header {
+    padding: 0.5rem 0;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.header p {
+    color: #6F4E37;
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+/* Button styles */
+.stButton>button {
+    border: 1px solid #6F4E37;
+    color: white;
+    background-color: #6F4E37;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s;
+    width: 100%;
+}
+
+.stButton>button:hover {
+    background-color: #5a3d2a;
+    border-color: #5a3d2a;
+}
+
+/* Metric styles */
+.stMetric {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background-color: white;
+}
+
+/* Dataframe styles */
+.stDataFrame {
+    border-radius: 8px;
+}
+
+/* Footer styles */
+.footer {
+    text-align: center;
+    padding: 1rem 0;
+    color: #6F4E37;
+    font-size: 0.9rem;
+}
+
+/* Sidebar styles */
+.stSidebar {
+    background-color: #f8f8f8;
+    padding: 1.5rem;
+    border-right: 1px solid #e0e0e0;
+}
+
+/* Card styles */
+.stAlert {
+    border-radius: 8px;
+}
