@@ -2,11 +2,11 @@ import streamlit as st
 from datetime import datetime
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from utils.event_handler import EventHandler
 from utils.profile_generator import generate_roast_profile
-from utils.visualization import plot_roast_profile
 import time
-import os
+import random
 
 # Set page config
 st.set_page_config(
@@ -35,6 +35,66 @@ if 'start_time' not in st.session_state:
     st.session_state.start_time = None
 if 'roast_profile' not in st.session_state:
     st.session_state.roast_profile = None
+if 'first_crack_occurred' not in st.session_state:
+    st.session_state.first_crack_occurred = False
+if 'first_crack_params' not in st.session_state:
+    st.session_state.first_crack_params = None
+
+# Fungsi visualisasi baru dengan fitur tambahan
+def plot_roast_profile(target_profile, actual_data=None):
+    fig = go.Figure()
+    
+    # Plot target profile
+    fig.add_trace(go.Scatter(
+        x=target_profile['Time'],
+        y=target_profile['Temperature'],
+        mode='lines',
+        name='Target Profile',
+        line=dict(color='blue', dash='dash')
+    )
+    
+    if actual_data is not None and not actual_data.empty:
+        # Plot actual temperature
+        fig.add_trace(go.Scatter(
+            x=actual_data['Time'],
+            y=actual_data['Temperature'],
+            mode='lines+markers',
+            name='Actual Temperature',
+            line=dict(color='red', width=2),
+            marker=dict(size=5)
+        )
+        
+        # Plot events
+        event_data = actual_data[actual_data['Event'] != '']
+        if not event_data.empty:
+            fig.add_trace(go.Scatter(
+                x=event_data['Time'],
+                y=event_data['Temperature'],
+                mode='markers',
+                name='Events',
+                marker=dict(color='green', size=12, symbol='diamond'),
+                text=event_data['Event'],
+                hoverinfo='text+x+y'
+            ))
+    
+    # Tambahkan zona pemanggangan
+    fig.add_hrect(y0=150, y1=180, line_width=0, fillcolor="yellow", opacity=0.1, 
+                  annotation_text="Drying Phase", annotation_position="top left")
+    fig.add_hrect(y0=180, y1=210, line_width=0, fillcolor="orange", opacity=0.1, 
+                  annotation_text="Browning Phase", annotation_position="top left")
+    fig.add_hrect(y0=210, y1=230, line_width=0, fillcolor="red", opacity=0.1, 
+                  annotation_text="Development Phase", annotation_position="top left")
+    
+    fig.update_layout(
+        title='Roast Profile: Target vs Actual',
+        xaxis_title='Time (minutes)',
+        yaxis_title='Temperature (°C)',
+        hovermode='x unified',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+        height=500
+    )
+    
+    return fig
 
 # Header
 st.title("☕ Coffee Roasting Dashboard")
@@ -67,6 +127,18 @@ with st.sidebar:
             bean_type, roast_level, charge_temp, development_time
         )
         event_handler.add_event("Profile Generated", f"{bean_type} {roast_level} profile created")
+        
+        # Generate random first crack parameters
+        min_time = 7.0 if roast_level == 'Light' else 5.0
+        max_time = 10.0 if roast_level == 'Light' else 8.0
+        min_temp = 190 if roast_level == 'Light' else 200
+        max_temp = 205 if roast_level == 'Light' else 215
+        
+        st.session_state.first_crack_params = {
+            'time': random.uniform(min_time, max_time),
+            'temp': random.uniform(min_temp, max_temp)
+        }
+        st.session_state.first_crack_occurred = False
 
 # Main content
 col1, col2 = st.columns([2, 1])
@@ -75,8 +147,17 @@ with col1:
     st.header("Roast Profile Visualization")
     
     if st.session_state.roast_profile is not None:
-        fig = plot_roast_profile(st.session_state.roast_profile)
+        fig = plot_roast_profile(
+            st.session_state.roast_profile,
+            st.session_state.roast_data if not st.session_state.roast_data.empty else None
+        )
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Tampilkan parameter first crack jika ada
+        if st.session_state.first_crack_params:
+            st.info(f"**First Crack Prediction**: "
+                    f"{st.session_state.first_crack_params['time']:.1f} min at "
+                    f"{st.session_state.first_crack_params['temp']:.1f}°C")
     else:
         st.info("Generate a roast profile using the sidebar controls to begin")
     
@@ -85,20 +166,41 @@ with col1:
     control_col1, control_col2, control_col3 = st.columns(3)
     
     with control_col1:
-        if st.button("Start Roast", disabled=st.session_state.roast_in_progress or st.session_state.roast_profile is None):
+        if st.button("Start Roast", disabled=st.session_state.roast_in_progress or st.session_state.roast_profile is None,
+                     key="start_roast"):
             st.session_state.roast_in_progress = True
             st.session_state.start_time = datetime.now()
+            st.session_state.roast_data = pd.DataFrame(columns=['Time', 'Temperature', 'Event'])
+            st.session_state.first_crack_occurred = False
             event_handler.add_event("Roast Started", f"Batch: {batch_size}g {bean_type} from {origin}")
     
     with control_col2:
-        if st.button("Add Event", disabled=not st.session_state.roast_in_progress):
-            event_type = st.selectbox("Event Type", ["First Crack", "Second Crack", "Temperature Adjustment", "Other"])
+        with st.expander("Add Event", expanded=False):
+            event_type = st.selectbox("Event Type", ["First Crack", "Second Crack", "Fan Adjustment", "Gas Adjustment", "Other"])
             event_note = st.text_input("Event Notes")
             if st.button("Confirm Event"):
-                event_handler.add_event(event_type, event_note)
+                if st.session_state.roast_in_progress:
+                    current_time = (datetime.now() - st.session_state.start_time).total_seconds() / 60
+                    if st.session_state.roast_profile is not None:
+                        current_temp = st.session_state.roast_profile.iloc[
+                            min(int(current_time * 2), len(st.session_state.roast_profile)-1)
+                        ]['Temperature']
+                    else:
+                        current_temp = 0
+                    
+                    event_handler.add_event(event_type, event_note)
+                    
+                    # Update roast data with event
+                    new_event = pd.DataFrame({
+                        'Time': [current_time],
+                        'Temperature': [current_temp],
+                        'Event': [event_type]
+                    })
+                    st.session_state.roast_data = pd.concat([st.session_state.roast_data, new_event])
+                    st.success(f"Event '{event_type}' added at {current_time:.1f} min!")
     
     with control_col3:
-        if st.button("End Roast", disabled=not st.session_state.roast_in_progress):
+        if st.button("End Roast", disabled=not st.session_state.roast_in_progress, key="end_roast"):
             st.session_state.roast_in_progress = False
             duration = datetime.now() - st.session_state.start_time
             event_handler.add_event("Roast Completed", f"Duration: {duration.total_seconds()/60:.1f} minutes")
@@ -123,21 +225,45 @@ with col1:
                 'Event': ['']
             })
             st.session_state.roast_data = pd.concat([st.session_state.roast_data, new_data])
+            
+            # Automatic first crack detection
+            if (st.session_state.first_crack_params 
+                and not st.session_state.first_crack_occurred 
+                and current_time >= st.session_state.first_crack_params['time'] 
+                and current_temp >= st.session_state.first_crack_params['temp']):
+                
+                event_handler.add_event("First Crack", "Automatically detected")
+                st.session_state.first_crack_occurred = True
+                
+                # Update roast data with event
+                new_event = pd.DataFrame({
+                    'Time': [current_time],
+                    'Temperature': [current_temp],
+                    'Event': ["First Crack"]
+                })
+                st.session_state.roast_data = pd.concat([st.session_state.roast_data, new_event])
+                st.success("🔥 First Crack detected automatically!")
 
 with col2:
     st.header("Roast Events Log")
     events_df = event_handler.get_events_df()
     
     if not events_df.empty:
+        styled_df = events_df.style.applymap(
+            lambda x: 'background-color: #ffd700' if 'First Crack' in x else '', 
+            subset=['event_type']
+        )
+        
         st.dataframe(
-            events_df,
+            styled_df,
             column_config={
                 "timestamp": "Time",
                 "event_type": "Event",
                 "details": "Details"
             },
             hide_index=True,
-            use_container_width=True
+            use_container_width=True,
+            height=300
         )
         
         if st.button("Clear Events"):
@@ -159,10 +285,18 @@ with col2:
             start_time = pd.to_datetime(st.session_state.start_time)
             time_to_first_crack = (first_crack_time - start_time).total_seconds() / 60
         
-        st.metric("Current Temperature", f"{latest_temp:.1f}°C")
-        st.metric("Peak Temperature", f"{max_temp:.1f}°C")
-        st.metric("Time to First Crack", 
-                 f"{time_to_first_crack:.1f} min" if isinstance(time_to_first_crack, float) else time_to_first_crack)
+        col_stat1, col_stat2 = st.columns(2)
+        col_stat1.metric("Current Temperature", f"{latest_temp:.1f}°C")
+        col_stat1.metric("Peak Temperature", f"{max_temp:.1f}°C")
+        col_stat2.metric("Time to First Crack", 
+                        f"{time_to_first_crack:.1f} min" if isinstance(time_to_first_crack, float) else time_to_first_crack)
+        
+        # Rate of Rise (RoR) calculation
+        if len(st.session_state.roast_data) > 10:
+            last_minute = st.session_state.roast_data[st.session_state.roast_data['Time'] > (current_time - 1)]
+            if not last_minute.empty:
+                ror = (last_minute['Temperature'].iloc[-1] - last_minute['Temperature'].iloc[0]) / 1
+                col_stat2.metric("Rate of Rise (RoR)", f"{ror:.1f}°C/min")
     
     st.header("Roast Recommendations")
     
@@ -193,6 +327,6 @@ with col2:
 st.markdown("---")
 st.markdown("""
     <div class="footer">
-        <p>Coffee Roasting Dashboard v1.0 | Event-Driven Roast Simulation</p>
+        <p>Coffee Roasting Dashboard v2.0 | Event-Driven Roast Simulation with Auto First Crack</p>
     </div>
 """, unsafe_allow_html=True)
