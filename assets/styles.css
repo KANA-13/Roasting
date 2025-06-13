@@ -47,6 +47,33 @@ body {
     border-radius: 8px;
 }
 
+
+# === Tambahan: Fitur Download CSV ===
+if not st.session_state.roast_data.empty:
+    st.download_button(
+        label="📄 Download CSV Report",
+        data=st.session_state.roast_data.to_csv(index=False),
+        file_name='roast_report.csv',
+        mime='text/csv'
+    )
+
+# === Tambahan: Prediksi Cupping Hasil Rasa Berdasarkan Durasi ===
+if st.session_state.roast_profile is not None:
+    duration = st.session_state.roast_profile['Time'].iloc[-1]
+    st.header("Predicted Flavor Profile")
+    if duration <= 8:
+        st.info("Predicted: **Bright and acidic** - Possibly underdeveloped")
+    elif duration <= 11:
+        st.info("Predicted: **Balanced and sweet** - Good development")
+    else:
+        st.warning("Predicted: **Bitter and smoky** - Possibly overdeveloped")
+
+# === Tambahan: Estimasi Konsumsi Energi (kWh) ===
+if not st.session_state.roast_in_progress and st.session_state.start_time:
+    total_minutes = (datetime.now() - st.session_state.start_time).total_seconds() / 60
+    power_kw = 2.5  # asumsi daya
+    energy_used = (power_kw * total_minutes) / 60  # kWh
+    st.metric("Estimated Energy Used", f"{energy_used:.2f} kWh")
 /* Footer styles */
 .footer {
     text-align: center;
