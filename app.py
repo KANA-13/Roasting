@@ -147,6 +147,28 @@ def plot_enhanced_roast_profile(target_profile, actual_data=None):
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
         height=500
     )
+    # Tambahkan RoR jika data aktual tersedia
+    if actual_data is not None and len(actual_data) >= 2:
+        actual_data_sorted = actual_data.sort_values("Time")
+        ror_values = np.gradient(actual_data_sorted['Temperature'], actual_data_sorted['Time'])  # RoR: ΔT/Δt
+        fig.add_trace(go.Scatter(
+            x=actual_data_sorted['Time'],
+            y=ror_values,
+            mode='lines',
+            name='Rate of Rise (°C/min)',
+            yaxis='y2',
+            line=dict(color='blue', width=2, dash='dot'),
+            hovertemplate='Time: %{x:.1f} min<br>RoR: %{y:.1f}°C/min'
+        ))
+        fig.update_layout(
+            yaxis2=dict(
+                title='Rate of Rise (°C/min)',
+                overlaying='y',
+                side='right',
+                showgrid=False
+            )
+        )
+
     
     return fig
 
@@ -162,6 +184,36 @@ with col1:
             st.session_state.roast_data if not st.session_state.roast_data.empty else None
         )
         st.plotly_chart(fig, use_container_width=True)
+        # === Fitur Tambahan ===
+        st.subheader("🔎 Additional Roast Insights")
+
+        # Estimasi konsumsi energi
+        if not st.session_state.roast_in_progress and st.session_state.start_time:
+            total_minutes = (datetime.now() - st.session_state.start_time).total_seconds() / 60
+            power_kw = 2.5  # asumsi daya
+            energy_used = (power_kw * total_minutes) / 60  # kWh
+            st.metric("Estimated Energy Used", f"{energy_used:.2f} kWh")
+
+        # Prediksi rasa
+        if st.session_state.roast_profile is not None:
+            duration = st.session_state.roast_profile['Time'].iloc[-1]
+            st.subheader("☕ Predicted Flavor Profile")
+            if duration <= 8:
+                st.info("Predicted: **Bright and acidic** - Possibly underdeveloped")
+            elif duration <= 11:
+                st.info("Predicted: **Balanced and sweet** - Good development")
+            else:
+                st.warning("Predicted: **Bitter and smoky** - Possibly overdeveloped")
+
+        # Download laporan
+        if not st.session_state.roast_data.empty:
+            st.download_button(
+                label="📄 Download CSV Report",
+                data=st.session_state.roast_data.to_csv(index=False),
+                file_name='roast_report.csv',
+                mime='text/csv'
+            )
+
         
         # Display crack predictions
         if st.session_state.first_crack_time:
